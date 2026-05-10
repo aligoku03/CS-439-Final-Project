@@ -1,0 +1,4 @@
+Protein,Model,ROC-AUC,F1,Precision,Recall
+EGFR,GNN,0.9159,0.0,0.0,0.0
+BACE1,GNN,,0.0,0.0,0.0
+HIV_Protease,GNN,0.5,0.0,0.0,0.0
