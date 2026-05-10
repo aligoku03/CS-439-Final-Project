@@ -1,0 +1,156 @@
+# Drug-Protein Binding Prediction with Graph Neural Networks
+
+CS 439 Final Project — Princeton/Rutgers Machine Learning
+
+This project predicts whether a small-molecule drug will bind to one of three disease-relevant proteins. We compare classical baseline models (Logistic Regression, Random Forest, XGBoost) against a custom Graph Neural Network that operates directly on molecular structure.
+
+## Proteins and Diseases
+
+| Protein | Disease | Drug Dataset |
+|---|---|---|
+| EGFR | Cancer | DAVIS (drug-target affinity) |
+| BACE1 | Alzheimer's | MoleculeNet BACE |
+| HIV Protease | HIV/AIDS | MoleculeNet HIV |
+
+Two additional proteins (COX2 for inflammation and Thrombin for blood clotting) are included in the structural analysis but not the binding prediction task, since matched drug binding datasets were not used for them.
+
+## Pipeline Overview
+
+The project runs as a sequence of scripts, each producing inputs for the next stage.
+
+```
+data_api_fetch.py     ->  Pull PDB structures from RCSB REST API
+data_filtering.py     ->  Parse local mmCIF files into feature CSVs
+data_standardize.py   ->  Normalize all 5 protein files to 44 features
+eda.py                ->  Generate 6 exploratory figures
+preprocessing.py      ->  Morgan fingerprints + train/test splits
+baseline_model.py     ->  LR / RF / XGBoost baselines
+GGN.py                ->  Graph Neural Network
+visualize_molecules.py->  Per-protein binder vs non-binder comparisons
+```
+
+## Data Sources
+
+Protein structural features come from the RCSB Protein Data Bank, accessed via two channels:
+
+- **REST API** (`data_api_fetch.py`) for HIV Protease (UniProt P03367) and Thrombin (P00734)
+- **Local mmCIF files** (`data_filtering.py`) for EGFR, BACE1, and COX2
+
+Drug-protein binding datasets:
+
+- **MoleculeNet HIV** and **MoleculeNet BACE** downloaded from the DeepChem S3 bucket
+- **DAVIS** drug-target affinity dataset for EGFR, downloaded from the dingyan20 GitHub repository
+
+## Features
+
+Each protein structure contributes 44 standardized features:
+
+- **Quality metrics**: resolution, R-work, R-free, B-factor mean, Rmerge
+- **Atom counts**: protein, solvent, total
+- **Crystal cell**: lengths a/b/c, angles alpha/beta/gamma, space group
+- **Crystal packing**: solvent content, Matthews coefficient
+- **Sequence**: full one-letter code plus 20 amino acid frequency columns
+- **Metadata**: title, keywords, experimental method, organism
+
+For drug molecules we use Morgan fingerprints (radius 2, 2048 bits) computed via RDKit. The GNN uses raw atom and bond features instead of fingerprints.
+
+Only structures with resolution at or below 2.5 Angstroms are kept for downstream modeling, following the Scientific Reports 2021 cutoff for drug discovery.
+
+## Models
+
+### Baselines (`baseline_model.py`)
+
+Three classical models trained per protein with balanced class weights to handle imbalance:
+
+- **Logistic Regression** with StandardScaler
+- **Random Forest** (100 trees, max depth 10)
+- **XGBoost** (100 estimators, depth 6, learning rate 0.1, scale_pos_weight for imbalance)
+
+### Graph Neural Network (`GGN.py`)
+
+A custom `DrugProteinGNN` that combines drug structure with protein features.
+
+**Architecture:**
+
+- 3 GCNConv layers (atom features -> 64-dim hidden) with BatchNorm and dropout (0.3)
+- Global mean pooling to produce one vector per molecule
+- Concatenation with the protein PDB feature vector
+- 3 fully connected layers (128 -> 64 -> 1)
+
+**Atom features (15-dim):** one-hot atom type (C, N, O, S, F, Cl, Br, I, P, Other), degree, valence, aromaticity, ring membership, formal charge, hydrogen count.
+
+**Bond features (6-dim):** one-hot bond type (single, double, triple, aromatic), conjugation, ring membership.
+
+**Training:** 50 epochs, Adam optimizer (lr=0.001), batch size 32, BCEWithLogitsLoss with `pos_weight` for class imbalance.
+
+## Results
+
+### Baseline ROC-AUC (test set)
+
+| Protein | Logistic Regression | Random Forest | XGBoost |
+|---|---|---|---|
+| EGFR | 0.776 | 0.777 | 0.778 |
+| BACE1 | 0.860 | 0.840 | **0.872** |
+| HIV Protease | 0.790 | 0.800 | 0.804 |
+
+### GNN ROC-AUC (test set)
+
+| Protein | GNN |
+|---|---|
+| EGFR | 0.916 |
+| BACE1 | n/a |
+| HIV Protease | 0.500 |
+
+The GNN improves substantially over the best baseline on EGFR. BACE1 and HIV Protease results show issues with the threshold-based metrics (F1, Precision, Recall all 0.0) which is a known limitation of the current scoring step at threshold 0.5 with imbalanced data.
+
+## Repository Structure
+
+```
+CS-439-Final-Project/
+├── data_api_fetch.py        # RCSB REST API fetcher
+├── data_filtering.py        # mmCIF file parser
+├── data_standardize.py      # Feature standardization across proteins
+├── eda.py                   # Exploratory data analysis (6 figures)
+├── preprocessing.py         # Drug datasets + Morgan FP + splits
+├── baseline_model.py        # LR / RF / XGBoost training and eval
+├── GGN.py                   # Graph Neural Network
+├── visualize_molecules.py   # Binder vs non-binder visuals
+├── main.py                  # Entry point (currently empty)
+└── results/
+    ├── baseline_results.csv
+    ├── gnn_results.csv
+    ├── *_gnn.pt             # Saved GNN model weights
+    └── figures/             # All generated plots
+```
+
+## Dependencies
+
+```
+pandas, numpy, scikit-learn, matplotlib
+requests
+rdkit
+torch, torch-geometric
+xgboost
+Pillow
+```
+
+## How to Run
+
+The scripts are designed to run in order. Update the `BASE_PATH` constant at the top of each script to point to your local data folder, then run:
+
+```bash
+python data_api_fetch.py
+python data_filtering.py
+python data_standardize.py
+python eda.py
+python preprocessing.py
+python baseline_model.py
+python GGN.py
+python visualize_molecules.py
+```
+
+Each script prints progress and saves outputs to disk for the next stage to consume.
+
+## Authors
+
+Dipen Patel, Ali Ugur, Sarthak Gandotra
