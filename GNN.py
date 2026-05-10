@@ -1,5 +1,5 @@
 # =============================================================
-# GGN.py
+# GNN.py
 # CS-439 Final Project — Rutgers University
 # =============================================================
 # This script trains a Graph Attention Network (GATConv) that
