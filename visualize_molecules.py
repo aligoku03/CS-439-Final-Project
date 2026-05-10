@@ -1,3 +1,23 @@
+# =============================================================
+# visualize_molecules.py
+# CS-439 Final Project — Rutgers University
+# =============================================================
+# This script generates two types of visualizations for each
+# protein: (1) a grid of 2D drug structure drawings comparing
+# binders vs non-binders side by side, and (2) histograms
+# comparing molecular weight and LogP distributions between
+# binders and non-binders. All figures are saved to
+# results/Visualization/.
+# =============================================================
+# Libraries:
+#   os         : file and folder management
+#   numpy      : numeric operations
+#   pandas     : loading raw drug datasets
+#   rdkit      : drawing 2D molecular structures and computing properties
+#   matplotlib : creating and saving all figures
+#   PIL        : converting RDKit molecule images for matplotlib display
+# =============================================================
+
 import os
 import numpy as np
 import pandas as pd
@@ -18,7 +38,7 @@ RDLogger.DisableLog('rdApp.*')
 # setting up the paths
 BASE_PATH = r'C:\Users\aligo\OneDrive\Desktop\Protein_Machine_Learning'
 RAW_PATH  = os.path.join(BASE_PATH, 'raw_datasets')
-FIG_PATH  = os.path.join(BASE_PATH, 'results', 'figures')
+FIG_PATH  = os.path.join(BASE_PATH, 'results', 'Visualization')
 
 os.makedirs(FIG_PATH, exist_ok=True)
 

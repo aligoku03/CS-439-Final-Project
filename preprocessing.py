@@ -1,3 +1,23 @@
+# =============================================================
+# preprocessing.py
+# CS-439 Final Project — Rutgers University
+# =============================================================
+# This script downloads the drug bioactivity datasets (DAVIS for
+# EGFR, BACE for BACE1, HIV for HIV Protease), converts each drug
+# SMILES string into a 2048-bit Morgan circular fingerprint using
+# RDKit, combines those fingerprints with the mean PDB structural
+# features for each protein, and saves stratified 80/20 train/test
+# splits for all three proteins to the processed_data folder.
+# =============================================================
+# Libraries:
+#   os              : file and folder management
+#   urllib.request  : downloading drug datasets directly from URLs
+#   numpy           : numeric array operations
+#   pandas          : loading, merging, and saving datasets
+#   sklearn         : stratified train/test splitting
+#   rdkit           : converting SMILES strings to Morgan fingerprints
+# =============================================================
+
 import os
 import urllib.request
 import numpy as np
@@ -8,6 +28,7 @@ warnings.filterwarnings('ignore')
 
 # setting up the paths and configuration
 BASE_PATH         = r'C:\Users\aligo\OneDrive\Desktop\Protein_Machine_Learning'
+PREPROCESSED_PATH = os.path.join(BASE_PATH, 'preprocessed_results')
 DATA_PATH         = os.path.join(BASE_PATH, 'processed_data')
 RAW_PATH          = os.path.join(BASE_PATH, 'raw_datasets')
 RESOLUTION_CUTOFF = 2.5
@@ -72,7 +93,7 @@ def smiles_to_morgan(smiles, radius=MORGAN_RADIUS, n_bits=MORGAN_BITS):
 # this loads the pdb features for a protein and returns the mean feature vector
 # we filter to high quality structures only (resolution <= 2.5A)
 def get_protein_feature_vector(protein_name):
-    path = os.path.join(BASE_PATH, f'{protein_name}_pdb_features.csv')
+    path = os.path.join(BASE_PATH, 'preprocessed_results', f'{protein_name}_pdb_features.csv')
     if not os.path.exists(path):
         print(f'    WARNING: {protein_name}_pdb_features.csv not found')
         return None, []
@@ -390,5 +411,3 @@ print('\n  Files saved:')
 for p in split_datasets:
     print(f'    {p}_train.csv')
     print(f'    {p}_test.csv')
-
-print('\n  Next: 04_baseline_models.py')

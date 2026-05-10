@@ -1,3 +1,21 @@
+# =============================================================
+# eda.py
+# CS-439 Final Project — Rutgers University
+# =============================================================
+# This script performs exploratory data analysis on the structural
+# features extracted from 1,592 PDB crystal structures across all
+# 5 proteins. It generates 6 publication-quality figures covering
+# dataset overview, resolution quality, feature correlations,
+# amino acid composition, R-free vs resolution scatter plots,
+# and B-factor distributions.
+# =============================================================
+# Libraries:
+#   pandas     : loading the PDB feature CSVs and computing stats
+#   numpy      : numeric operations and array handling
+#   matplotlib : creating and saving all 6 figures
+#   os         : managing output folder paths
+# =============================================================
+
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -11,7 +29,7 @@ warnings.filterwarnings('ignore')
 
 # setting up the paths and configuration
 BASE_PATH         = r'C:\Users\aligo\OneDrive\Desktop\Protein_Machine_Learning'
-FIG_PATH          = os.path.join(BASE_PATH, 'results', 'figures')
+FIG_PATH          = os.path.join(BASE_PATH, 'results', 'EDA')
 RESOLUTION_CUTOFF = 2.5    # 2.0 to 2.5A is the standard cutoff for drug discovery
 
 PROTEINS = ['EGFR', 'BACE1', 'COX2', 'HIV_Protease', 'Thrombin']
@@ -81,7 +99,7 @@ print("=" * 60)
 
 dfs = {}
 for protein in PROTEINS:
-    path = os.path.join(BASE_PATH, f'{protein}_pdb_features.csv')
+    path = os.path.join(BASE_PATH, 'preprocessed_results', f'{protein}_pdb_features.csv')
     if os.path.exists(path):
         dfs[protein] = pd.read_csv(path)
         dfs[protein]['organism'] = dfs[protein]['organism'].str.title()
@@ -445,4 +463,3 @@ for i, name in enumerate([
     'amino_acid_composition', 'rfree_vs_resolution', 'bfactor_analysis'
 ], start=1):
     print(f'    {i:02d}_{name}.png')
-print('\n  Next Step: 03_preprocessing.py')

@@ -1,3 +1,12 @@
+# data_standardize.py
+# this file standardizes all 5 protein CSV files so they all have
+# the same 44 features in the same column order
+# it adds the 20 amino acid composition columns, converts all numeric
+# columns to proper types, and fills missing values with column medians
+# pandas is used for loading and saving the CSV files
+# numpy is used for numeric operations and handling missing values
+# os is used for checking file paths and navigating folders
+
 import pandas as pd
 import numpy as np
 import os
@@ -6,6 +15,7 @@ import os
 BASE_PATH   = r'C:\Users\aligo\OneDrive\Desktop\Protein_Machine_Learning'
 AMINO_ACIDS = list('ACDEFGHIKLMNPQRSTVWY')
 
+# all 5 protein csv files we need to standardize
 PROTEINS = {
     'EGFR'        : 'EGFR_pdb_features.csv',
     'BACE1'       : 'BACE1_pdb_features.csv',
@@ -50,7 +60,7 @@ print("=" * 60)
 all_dfs = {}
 
 for protein_name, filename in PROTEINS.items():
-    filepath = os.path.join(BASE_PATH, filename)
+    filepath = os.path.join(BASE_PATH, 'preprocessed_results', filename)
 
     # skipping any protein file that doesn't exist yet
     if not os.path.exists(filepath):
@@ -95,7 +105,7 @@ for protein_name, filename in PROTEINS.items():
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
     # fix 3 is filling any remaining missing values with the column median
-    cols_to_fill = NUMERIC_COLS + [f'aa_{aa}' for aa in AMINO_ACIDS]
+    cols_to_fill  = NUMERIC_COLS + [f'aa_{aa}' for aa in AMINO_ACIDS]
     filled_report = []
 
     for col in cols_to_fill:
@@ -113,7 +123,7 @@ for protein_name, filename in PROTEINS.items():
     if filled_report:
         print(f"  Filled   :")
         for msg in filled_report:
-            print(f"    -> {msg}")
+            print(f"    {msg}")
     else:
         print(f"  Fill     : No numeric missing values")
 
@@ -131,7 +141,7 @@ for protein_name, filename in PROTEINS.items():
     col_order = [c for c in base_cols + aa_cols if c in df.columns]
 
     # tacking on any extra columns we didn't list above
-    remaining = [c for c in df.columns if c not in col_order]
+    remaining  = [c for c in df.columns if c not in col_order]
     col_order += remaining
 
     df = df[col_order]
@@ -143,7 +153,7 @@ for protein_name, filename in PROTEINS.items():
     all_dfs[protein_name] = df
 
 
-# running a final validation to make sure all 5 files match
+# running a final check to make sure all 5 files match
 print(f"\n{'='*60}")
 print("FINAL VALIDATION - ALL 5 PROTEINS")
 print(f"{'='*60}")
@@ -151,10 +161,10 @@ print(f"{'='*60}")
 reference_cols = None
 
 for protein_name, df in all_dfs.items():
-    res    = df['resolution'].dropna()
-    seq    = df['protein_sequence'].notna().sum()
-    aa_ok  = all(f'aa_{aa}' in df.columns for aa in AMINO_ACIDS)
-    miss   = df.isnull().sum().sum()
+    res   = df['resolution'].dropna()
+    seq   = df['protein_sequence'].notna().sum()
+    aa_ok = all(f'aa_{aa}' in df.columns for aa in AMINO_ACIDS)
+    miss  = df.isnull().sum().sum()
 
     print(f"\n  {protein_name}:")
     print(f"    Structures   : {len(df)}")
@@ -181,4 +191,3 @@ print(f"Total structures : {total}")
 print(f"Features per row : {len(list(all_dfs.values())[0].columns)}")
 print(f"{'='*60}")
 print("\nAll 5 files standardized and saved.")
-print("Next Step: 03_preprocessing.py - Feature engineering + model prep")
