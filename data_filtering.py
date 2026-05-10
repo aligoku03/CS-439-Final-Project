@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 
-# ── CONFIG ───────────────────────────────────────────────────────────────────
+# setting up the paths and protein folders to process
 main_folder = r'C:\Users\aligo\OneDrive\Desktop\Protein_Machine_Learning'
 proteins = {
     'EGFR'  : 'EGFR_dataset',
@@ -11,23 +11,20 @@ proteins = {
 }
 output_csv     = os.path.join(main_folder, 'pdb_features.csv')
 output_folder  = main_folder
-# ─────────────────────────────────────────────────────────────────────────────
 
 
+# this parses the protein sequence out of a cif file's lines
+# handles both single-line and multiline (semicolon-delimited) formats
 def parse_sequence(lines):
-    """
-    Parse protein sequence from CIF file lines.
-    Handles both single-line and multiline (semicolon-delimited) formats.
-    """
     seq_lines = []
     in_seq    = False
 
     for i, line in enumerate(lines):
-        # Trigger: the canonical sequence field
+        # the trigger line we are looking for
         if '_entity_poly.pdbx_seq_one_letter_code_can' in line:
             rest = line.split('pdbx_seq_one_letter_code_can', 1)[-1].strip()
 
-            # Single-line format: value on same line
+            # if the value is on the same line we just return it directly
             if rest and not rest.startswith(';') and not rest.startswith('_') \
                     and rest not in ('', '?', '.'):
                 return rest.strip("'").replace('\n', '').strip()
@@ -38,18 +35,18 @@ def parse_sequence(lines):
         if in_seq:
             stripped = line.strip()
 
-            # End of multiline block
+            # the sequence block is over once we hit a new field
             if stripped.startswith('_') or stripped.startswith('loop_') \
                     or stripped.startswith('#'):
                 break
 
-            # Semicolons mark start/end of multiline value
+            # semicolons mark the start and end of the multiline value
             if stripped == ';':
-                if seq_lines:   # closing semicolon → done
+                if seq_lines:   # closing semicolon means we are done
                     break
-                continue        # opening semicolon → start collecting
+                continue        # opening semicolon means start collecting
 
-            # Skip blank lines before content starts
+            # skipping any blank lines before the content begins
             if not stripped:
                 continue
 
@@ -60,9 +57,10 @@ def parse_sequence(lines):
     return None
 
 
+# this extracts all the features we want from a single cif file
 def extract_features(filepath, pdb_id, protein_name):
-    """Extract all important features from a single .cif file."""
 
+    # starting with all fields set to none and filling them in as we find them
     record = {
         'pdb_id'            : pdb_id,
         'protein'           : protein_name,
@@ -94,51 +92,51 @@ def extract_features(filepath, pdb_id, protein_name):
         with open(filepath, 'r', errors='ignore') as f:
             lines = f.readlines()
 
-        # Parse protein sequence with improved parser
+        # parsing the protein sequence using the helper above
         record['protein_sequence'] = parse_sequence(lines)
 
-        # Parse all other fields
+        # going through each line and pulling out the fields we care about
         for line in lines:
             l = line.strip()
             if not l or l.startswith('#'):
                 continue
 
-            # Title
+            # title of the structure
             if '_struct.title' in l and len(l.split()) > 1:
                 record['title'] = l.split('title', 1)[-1].strip().strip("'")
 
-            # Keywords
+            # keywords describing the structure
             elif '_struct_keywords.pdbx_keywords' in l and len(l.split()) > 1:
                 record['keywords'] = l.split('keywords', 1)[-1].strip().strip("'")
 
-            # Experimental method — handle both old and new CIF formats
+            # experimental method, handles both old and new cif formats
             elif '_exptl.method' in l and 'crystals' not in l:
                 val = l.split('method', 1)[-1].strip().strip("'")
                 if val and '_details' not in val and val not in ['.', '?', '']:
                     record['method'] = val
                 elif record['method'] is None:
-                    # Try to infer from refine line
+                    # try to infer from the refine line below
                     pass
 
-            # Infer method from refine id if still missing
+            # if method is still missing we try to infer it from refine id
             elif '_refine.pdbx_refine_id' in l:
                 val = l.split('pdbx_refine_id', 1)[-1].strip().strip("'")
                 if val and val not in ['.', '?', ''] and record['method'] is None:
                     record['method'] = val
 
-            # Resolution
+            # resolution in angstroms
             elif '_refine.ls_d_res_high' in l and 'error' not in l and 'low' not in l:
                 parts = l.split()
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
                     record['resolution'] = parts[-1]
 
-            # R-work
+            # r-work measures how well the model fits the data
             elif '_refine.ls_R_factor_R_work' in l and 'free' not in l:
                 parts = l.split()
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
                     record['r_work'] = parts[-1]
 
-            # R-free
+            # r-free is the same but on held-out reflections
             elif '_refine.ls_R_factor_R_free' in l \
                     and 'error' not in l and 'details' not in l \
                     and 'percent' not in l and 'number' not in l:
@@ -146,19 +144,19 @@ def extract_features(filepath, pdb_id, protein_name):
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
                     record['r_free'] = parts[-1]
 
-            # B-factor mean
+            # b-factor mean measures atomic flexibility
             elif '_refine.B_iso_mean' in l:
                 parts = l.split()
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
                     record['b_iso_mean'] = parts[-1]
 
-            # Rmerge
+            # rmerge is a diffraction data quality metric
             elif '_reflns.pdbx_Rmerge_I_obs' in l:
                 parts = l.split()
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
                     record['rmerge'] = parts[-1]
 
-            # Atom counts
+            # atom counts for protein, solvent, and total
             elif '_refine_hist.pdbx_number_atoms_protein' in l:
                 parts = l.split()
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
@@ -174,7 +172,7 @@ def extract_features(filepath, pdb_id, protein_name):
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
                     record['num_atoms_total'] = parts[-1]
 
-            # Cell dimensions
+            # crystal cell dimensions (a, b, c lengths)
             elif '_cell.length_a ' in l:
                 parts = l.split()
                 if len(parts) > 1: record['cell_length_a'] = parts[-1]
@@ -187,6 +185,7 @@ def extract_features(filepath, pdb_id, protein_name):
                 parts = l.split()
                 if len(parts) > 1: record['cell_length_c'] = parts[-1]
 
+            # crystal cell angles (alpha, beta, gamma)
             elif '_cell.angle_alpha ' in l:
                 parts = l.split()
                 if len(parts) > 1: record['cell_angle_alpha'] = parts[-1]
@@ -199,11 +198,11 @@ def extract_features(filepath, pdb_id, protein_name):
                 parts = l.split()
                 if len(parts) > 1: record['cell_angle_gamma'] = parts[-1]
 
-            # Space group
+            # space group describes the crystal symmetry
             elif '_symmetry.space_group_name_H-M' in l:
                 record['space_group'] = l.split('H-M', 1)[-1].strip().strip("'")
 
-            # Crystal properties
+            # solvent content and matthews coefficient describe crystal packing
             elif '_exptl_crystal.density_percent_sol' in l:
                 parts = l.split()
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
@@ -214,7 +213,7 @@ def extract_features(filepath, pdb_id, protein_name):
                 if len(parts) > 1 and parts[-1] not in ['.', '?']:
                     record['matthews_coeff'] = parts[-1]
 
-            # Organism
+            # organism the protein came from
             elif '_entity_src_gen.pdbx_gene_src_scientific_name' in l:
                 val = l.split('name', 1)[-1].strip().strip("'")
                 if val and val not in ['.', '?', '']:
@@ -226,7 +225,7 @@ def extract_features(filepath, pdb_id, protein_name):
     return record
 
 
-# ── STEP 1: EXTRACT FEATURES ─────────────────────────────────────────────────
+# step 1 is walking through every cif file and extracting features
 all_records = []
 
 for protein_name, dataset_folder in proteins.items():
@@ -244,7 +243,7 @@ for protein_name, dataset_folder in proteins.items():
                 record   = extract_features(filepath, pdb_id, protein_name)
                 all_records.append(record)
                 count += 1
-                print(f"  [{count}] {pdb_id} — "
+                print(f"  [{count}] {pdb_id} - "
                       f"resolution: {record['resolution']}, "
                       f"seq: {'YES' if record['protein_sequence'] else 'MISSING'}")
 
@@ -255,12 +254,12 @@ df.to_csv(output_csv, index=False)
 print(f"\nRaw features saved: {output_csv}")
 
 
-# ── STEP 2: CLEAN MISSING VALUES ─────────────────────────────────────────────
+# step 2 is cleaning up the missing values
 print(f"\n{'='*50}")
 print("CLEANING MISSING VALUES")
 print(f"{'='*50}")
 
-# Convert numeric columns
+# converting numeric columns from strings to actual numbers
 numeric_cols = [
     'resolution', 'r_work', 'r_free', 'b_iso_mean', 'rmerge',
     'num_atoms_protein', 'num_atoms_solvent', 'num_atoms_total',
@@ -271,7 +270,9 @@ numeric_cols = [
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors='coerce')
 
-# Fix method: infer X-RAY for structures with resolution, NMR for those without
+
+# this fixes missing methods by inferring from resolution
+# structures with resolution are xray, ones without are nmr
 def fix_method(row):
     if pd.notna(row['method']) and row['method'] not in ['.', '?', '']:
         return row['method']
@@ -281,35 +282,35 @@ def fix_method(row):
 
 df['method'] = df.apply(fix_method, axis=1)
 
-# Fill organism missing values
+# filling missing organism values with unknown
 df['organism'] = df['organism'].fillna('Unknown')
 
-# Fill numeric missing values with median per protein group
+# filling missing numeric values with the median for that protein
 for col in numeric_cols:
     df[col] = df.groupby('protein')[col].transform(
         lambda x: x.fillna(x.median())
     )
 
-# Report missing sequences
+# checking how many sequences are still missing per protein
 print("\nMissing sequences per protein:")
 for protein in ['EGFR', 'BACE1', 'COX2']:
     sub = df[df['protein'] == protein]
     missing = sub['protein_sequence'].isna().sum()
     print(f"  {protein}: {missing}/{len(sub)} missing")
 
-# Drop rows where protein_sequence is still missing
+# dropping any rows that still don't have a sequence
 before = len(df)
 df = df.dropna(subset=['protein_sequence'])
 after  = len(df)
 print(f"\nDropped {before - after} rows with missing protein sequences")
 print(f"Remaining: {after} structures")
 
-# Final missing value report
+# final report on remaining missing values
 print("\nFinal missing values:")
 print(df.isnull().sum()[df.isnull().sum() > 0])
 
 
-# ── STEP 3: SPLIT INTO 3 CSV FILES ───────────────────────────────────────────
+# step 3 is splitting the combined dataframe into 3 separate csvs
 print(f"\n{'='*50}")
 print("SAVING 3 SEPARATE CSV FILES")
 print(f"{'='*50}")

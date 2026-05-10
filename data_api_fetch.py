@@ -3,29 +3,28 @@ import pandas as pd
 import time
 import os
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
+# setting up the paths and proteins to fetch
 BASE_PATH = r'C:\Users\aligo\OneDrive\Desktop\Protein_Machine_Learning'
 
 PROTEINS = {
     'HIV_Protease': {
         'uniprot_id' : 'P03367',
-        'description': 'HIV-1 Protease — HIV/AIDS',
+        'description': 'HIV-1 Protease - HIV/AIDS',
         'output_file': 'HIV_Protease_pdb_features.csv',
     },
     'Thrombin': {
         'uniprot_id' : 'P00734',
-        'description': 'Thrombin — Blood Clotting',
+        'description': 'Thrombin - Blood Clotting',
         'output_file': 'Thrombin_pdb_features.csv',
     },
 }
 
+# the 20 standard amino acids used for composition features
 AMINO_ACIDS = list('ACDEFGHIKLMNPQRSTVWY')
-# ─────────────────────────────────────────────────────────────────────────────
 
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
+# this safely walks through nested dict and list keys without crashing
 def safe_get(data, *keys, default=None):
-    """Safely navigate nested dict keys."""
     for key in keys:
         if isinstance(data, dict):
             data = data.get(key, default)
@@ -36,8 +35,8 @@ def safe_get(data, *keys, default=None):
     return data
 
 
+# this gets all pdb ids linked to a uniprot id using the rcsb search api
 def get_pdb_ids_for_uniprot(uniprot_id):
-    """Get all PDB IDs linked to a UniProt ID via RCSB search API."""
     url   = "https://search.rcsb.org/rcsbsearch/v2/query"
     query = {
         "query": {
@@ -66,8 +65,8 @@ def get_pdb_ids_for_uniprot(uniprot_id):
     return []
 
 
+# this fetches the main entry data for a single pdb id
 def fetch_entry(pdb_id):
-    """Fetch main entry data from RCSB REST API."""
     url = f"https://data.rcsb.org/rest/v1/core/entry/{pdb_id}"
     try:
         r = requests.get(url, timeout=10)
@@ -78,8 +77,8 @@ def fetch_entry(pdb_id):
     return None
 
 
+# this fetches the polymer entity data which has the sequence and organism
 def fetch_polymer_entity(pdb_id, entity_id=1):
-    """Fetch polymer entity data (sequence, organism) from RCSB REST API."""
     url = f"https://data.rcsb.org/rest/v1/core/polymer_entity/{pdb_id}/{entity_id}"
     try:
         r = requests.get(url, timeout=10)
@@ -90,8 +89,8 @@ def fetch_polymer_entity(pdb_id, entity_id=1):
     return None
 
 
+# this converts a protein sequence into 20 amino acid frequency features
 def sequence_to_aa_composition(sequence):
-    """Convert protein sequence to amino acid frequency features."""
     if not sequence:
         return {f'aa_{aa}': None for aa in AMINO_ACIDS}
     sequence = str(sequence).upper()
@@ -102,17 +101,8 @@ def sequence_to_aa_composition(sequence):
             for aa in AMINO_ACIDS}
 
 
+# this pulls all the features we want from the api response and returns one row
 def extract_all_features(pdb_id, protein_name, entry_data, entity_data):
-    """
-    Extract ALL features matching the mmCIF file format:
-    - Basic info
-    - Quality metrics (resolution, r_free, r_work, b_iso_mean, rmerge)
-    - Crystal features (cell dimensions, angles, space group)
-    - Atom counts
-    - Solvent content, Matthews coefficient
-    - Protein sequence and amino acid composition
-    - Organism
-    """
     record = {
         'pdb_id' : pdb_id,
         'protein': protein_name,
@@ -121,31 +111,31 @@ def extract_all_features(pdb_id, protein_name, entry_data, entity_data):
     if not entry_data:
         return record
 
-    # ── Basic info ────────────────────────────────────────────────────────────
+    # basic info like title and keywords
     record['title']    = safe_get(entry_data, 'struct', 'title')
     record['keywords'] = safe_get(entry_data, 'struct_keywords',
                                   'pdbx_keywords')
 
-    # ── Experimental method ───────────────────────────────────────────────────
+    # experimental method (xray, nmr, etc)
     exptl = safe_get(entry_data, 'exptl', default=[{}])
     record['method'] = safe_get(exptl, 0, 'method')
 
-    # ── Resolution ────────────────────────────────────────────────────────────
+    # resolution in angstroms (lower means higher quality)
     refine = safe_get(entry_data, 'refine', default=[{}])
     record['resolution'] = safe_get(refine, 0, 'ls_d_res_high')
 
-    # ── R-work and R-free ─────────────────────────────────────────────────────
+    # r-work and r-free measure how well the model fits the data
     record['r_work'] = safe_get(refine, 0, 'ls_R_factor_R_work')
     record['r_free'] = safe_get(refine, 0, 'ls_R_factor_R_free')
 
-    # ── B-factor mean ─────────────────────────────────────────────────────────
+    # b-factor measures atomic flexibility
     record['b_iso_mean'] = safe_get(refine, 0, 'B_iso_mean')
 
-    # ── Rmerge ────────────────────────────────────────────────────────────────
+    # rmerge is a quality metric from the diffraction data
     reflns = safe_get(entry_data, 'reflns', default=[{}])
     record['rmerge'] = safe_get(reflns, 0, 'pdbx_Rmerge_I_obs')
 
-    # ── Atom counts ───────────────────────────────────────────────────────────
+    # atom counts for protein, solvent, and total
     refine_hist = safe_get(entry_data, 'refine_hist', default=[{}])
     record['num_atoms_protein'] = safe_get(refine_hist, 0,
                                            'pdbx_number_atoms_protein')
@@ -154,7 +144,7 @@ def extract_all_features(pdb_id, protein_name, entry_data, entity_data):
     record['num_atoms_total']   = safe_get(refine_hist, 0,
                                            'number_atoms_total')
 
-    # ── Crystal cell dimensions ───────────────────────────────────────────────
+    # crystal cell dimensions and angles
     cell = safe_get(entry_data, 'cell', default={})
     record['cell_length_a']    = safe_get(cell, 'length_a')
     record['cell_length_b']    = safe_get(cell, 'length_b')
@@ -163,29 +153,29 @@ def extract_all_features(pdb_id, protein_name, entry_data, entity_data):
     record['cell_angle_beta']  = safe_get(cell, 'angle_beta')
     record['cell_angle_gamma'] = safe_get(cell, 'angle_gamma')
 
-    # ── Space group ───────────────────────────────────────────────────────────
+    # space group describes the crystal symmetry
     symmetry = safe_get(entry_data, 'symmetry', default={})
     record['space_group'] = safe_get(symmetry, 'space_group_name_H_M')
 
-    # ── Solvent content and Matthews coefficient ──────────────────────────────
+    # solvent content and matthews coefficient describe the crystal packing
     exptl_crystal = safe_get(entry_data, 'exptl_crystal', default=[{}])
     record['solvent_content'] = safe_get(exptl_crystal, 0,
                                          'density_percent_sol')
     record['matthews_coeff']  = safe_get(exptl_crystal, 0,
                                          'density_Matthews')
 
-    # ── Organism ──────────────────────────────────────────────────────────────
+    # organism and sequence come from the polymer entity response
     if entity_data:
         src_list = safe_get(entity_data,
                             'rcsb_entity_source_organism', default=[])
         record['organism'] = safe_get(src_list, 0, 'scientific_name')
 
-        # ── Protein sequence ──────────────────────────────────────────────────
+        # the canonical one-letter sequence
         sequence = safe_get(entity_data, 'entity_poly',
                             'pdbx_seq_one_letter_code_can')
         record['protein_sequence'] = sequence
 
-        # ── Amino acid composition ────────────────────────────────────────────
+        # adding the 20 amino acid composition features
         aa_features = sequence_to_aa_composition(sequence)
         record.update(aa_features)
     else:
@@ -196,26 +186,22 @@ def extract_all_features(pdb_id, protein_name, entry_data, entity_data):
     return record
 
 
-# ── MAIN FETCH FUNCTION ───────────────────────────────────────────────────────
+# this fetches all pdb structures for one protein and saves them to csv
 def fetch_protein(protein_name, config):
-    """
-    Fetch all PDB structural features for a protein.
-    Matches the exact column format of the mmCIF-extracted files.
-    """
     output_path = os.path.join(BASE_PATH, config['output_file'])
 
-    # Skip if already done
+    # skipping if we already fetched this one with the full feature set
     if os.path.exists(output_path):
         existing = pd.read_csv(output_path)
-        # Check if this is the old format (missing crystal features)
+        # checking if the file has the new crystal feature columns
         has_cell = 'cell_length_a' in existing.columns
         if has_cell:
-            print(f"\n{protein_name}: Already fetched with full features — "
+            print(f"\n{protein_name}: Already fetched with full features - "
                   f"{len(existing)} structures")
             print("  Delete the CSV to re-fetch.")
             return existing
         else:
-            print(f"\n{protein_name}: Old format detected — re-fetching "
+            print(f"\n{protein_name}: Old format detected - re-fetching "
                   f"with full crystal features...")
             os.remove(output_path)
 
@@ -225,7 +211,7 @@ def fetch_protein(protein_name, config):
     print(f"UniProt : {config['uniprot_id']}")
     print(f"{'='*60}")
 
-    # Step 1 — Get all PDB IDs
+    # step 1 is getting the list of all pdb ids for this protein
     print(f"\nStep 1: Searching for all {protein_name} structures...")
     pdb_ids = get_pdb_ids_for_uniprot(config['uniprot_id'])
     print(f"  Found {len(pdb_ids)} PDB entries")
@@ -234,7 +220,7 @@ def fetch_protein(protein_name, config):
         print(f"  No structures found.")
         return None
 
-    # Step 2 — Fetch features for each structure
+    # step 2 is fetching features for each structure (2 api calls each)
     print(f"\nStep 2: Fetching features...")
     print(f"  Each structure = 2 API calls (entry + polymer entity)")
     est_mins = len(pdb_ids) * 0.7 / 60
@@ -245,11 +231,11 @@ def fetch_protein(protein_name, config):
 
     for i, pdb_id in enumerate(pdb_ids):
 
-        # Call 1: Main entry data
+        # first call gets the main entry data
         entry_data = fetch_entry(pdb_id)
         time.sleep(0.2)
 
-        # Call 2: Polymer entity data (sequence + organism)
+        # second call gets the polymer entity (sequence and organism)
         entity_data = fetch_polymer_entity(pdb_id, entity_id=1)
         time.sleep(0.2)
 
@@ -265,18 +251,18 @@ def fetch_protein(protein_name, config):
             res = 'FAILED'
             seq = 'NO'
 
-        # Progress every 25 structures
+        # printing progress every 25 structures
         if (i + 1) % 25 == 0 or (i + 1) == len(pdb_ids):
-            print(f"  [{i+1:4d}/{len(pdb_ids)}] {pdb_id} — "
+            print(f"  [{i+1:4d}/{len(pdb_ids)}] {pdb_id} - "
                   f"res={res} seq={seq} | "
                   f"fetched={len(records)} failed={failed}")
 
-    # Step 3 — Clean and save
+    # step 3 is cleaning everything up and saving to csv
     print(f"\nStep 3: Cleaning and saving...")
 
     df = pd.DataFrame(records)
 
-    # Convert numeric columns
+    # converting all numeric columns from strings to actual numbers
     numeric_cols = [
         'resolution', 'r_work', 'r_free', 'b_iso_mean', 'rmerge',
         'num_atoms_protein', 'num_atoms_solvent', 'num_atoms_total',
@@ -289,7 +275,7 @@ def fetch_protein(protein_name, config):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # Reorder columns to match mmCIF files exactly + extra API columns
+    # putting columns in a consistent order so all proteins match
     col_order = [
         'pdb_id', 'protein', 'title', 'keywords', 'method',
         'resolution', 'r_work', 'r_free', 'b_iso_mean', 'rmerge',
@@ -300,23 +286,23 @@ def fetch_protein(protein_name, config):
         'organism', 'protein_sequence',
     ] + [f'aa_{aa}' for aa in AMINO_ACIDS]
 
-    # Only keep columns that exist
+    # only keeping columns that actually exist in the dataframe
     col_order = [c for c in col_order if c in df.columns]
     df        = df[col_order]
 
     df.to_csv(output_path, index=False)
 
-    # Summary
+    # printing a summary of what we got
     print(f"\n  Results for {protein_name}:")
-    print(f"  {'─'*40}")
+    print(f"  {'-'*40}")
     print(f"  Structures saved    : {len(df)}")
     print(f"  Features per row    : {len(df.columns)}")
     print(f"  Failed fetches      : {failed}")
 
     res = df['resolution'].dropna()
     if len(res) > 0:
-        print(f"  Avg resolution      : {res.mean():.2f} Å")
-        print(f"  Pass ≤2.5Å          : "
+        print(f"  Avg resolution      : {res.mean():.2f} A")
+        print(f"  Pass <=2.5A         : "
               f"{(res<=2.5).sum()} ({(res<=2.5).sum()/len(res)*100:.0f}%)")
 
     seq_count = df['protein_sequence'].notna().sum()
@@ -329,10 +315,10 @@ def fetch_protein(protein_name, config):
     return df
 
 
-# ── RUN ───────────────────────────────────────────────────────────────────────
+# running the fetch for all proteins
 if __name__ == '__main__':
     print("=" * 60)
-    print("RCSB PDB API FETCH — FULL FEATURE VERSION")
+    print("RCSB PDB API FETCH - FULL FEATURE VERSION")
     print("Proteins : HIV Protease + Thrombin")
     print("Features : Matches mmCIF file format exactly")
     print("=" * 60)
@@ -346,11 +332,12 @@ if __name__ == '__main__':
         if df is not None:
             results[protein_name] = df
 
-    # Final comparison
+    # printing the final comparison across all 5 proteins
     print(f"\n{'='*60}")
-    print("FINAL SUMMARY — ALL 5 PROTEINS")
+    print("FINAL SUMMARY - ALL 5 PROTEINS")
     print(f"{'='*60}")
 
+    # loading the existing csv files for the other 3 proteins
     existing_files = {
         'EGFR' : 'EGFR_pdb_features.csv',
         'BACE1': 'BACE1_pdb_features.csv',
@@ -371,8 +358,8 @@ if __name__ == '__main__':
         passed = (res <= 2.5).sum() if len(res) > 0 else 0
         print(f"\n  {name:15s}: {len(df):4d} structures | "
               f"{len(df.columns):2d} features | "
-              f"avg res {res.mean():.2f}Å | "
-              f"{passed/len(res)*100:.0f}% pass ≤2.5Å"
+              f"avg res {res.mean():.2f}A | "
+              f"{passed/len(res)*100:.0f}% pass <=2.5A"
               if len(res) > 0 else
               f"\n  {name:15s}: {len(df):4d} structures | "
               f"{len(df.columns):2d} features")

@@ -17,6 +17,7 @@ from sklearn.metrics         import (
 from sklearn.preprocessing   import StandardScaler
 from sklearn.utils.class_weight import compute_class_weight
 
+# trying to import xgboost, skipping that model if it isn't installed
 try:
     from xgboost import XGBClassifier
     XGBOOST_AVAILABLE = True
@@ -24,7 +25,7 @@ except ImportError:
     print("XGBoost not installed. Run: pip install xgboost")
     XGBOOST_AVAILABLE = False
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
+# setting up the paths and configuration
 BASE_PATH  = r'C:\Users\aligo\OneDrive\Desktop\Protein_Machine_Learning'
 DATA_PATH  = os.path.join(BASE_PATH, 'processed_data')
 RES_PATH   = os.path.join(BASE_PATH, 'results')
@@ -34,34 +35,35 @@ RANDOM_STATE = 42
 os.makedirs(RES_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
+# the proteins we are training models for and their associated diseases
 PROTEINS = ['EGFR', 'BACE1', 'HIV_Protease']
 DISEASE  = {
     'EGFR'        : 'Cancer',
     'BACE1'       : "Alzheimer's",
     'HIV_Protease': 'HIV/AIDS',
 }
+
+# colors used for each model in the plots
 COLORS = {
     'Logistic Regression': '#2196F3',
     'Random Forest'      : '#4CAF50',
     'XGBoost'            : '#FF5722',
 }
-# ─────────────────────────────────────────────────────────────────────────────
 
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
+# this loads the train and test csvs for a protein
 def load_data(protein_name):
-    """Load train and test sets for a protein."""
     train_path = os.path.join(DATA_PATH, f'{protein_name}_train.csv')
     test_path  = os.path.join(DATA_PATH, f'{protein_name}_test.csv')
 
     if not os.path.exists(train_path):
-        print(f'  WARNING: {protein_name}_train.csv not found — skipping')
+        print(f'  WARNING: {protein_name}_train.csv not found - skipping')
         return None, None, None, None
 
     train = pd.read_csv(train_path)
     test  = pd.read_csv(test_path)
 
-    # Drop non-feature columns
+    # dropping non-feature columns to get just the feature matrix
     drop_cols = ['label', 'smiles', 'protein']
     X_train = train.drop(columns=[c for c in drop_cols if c in train.columns])
     y_train = train['label']
@@ -71,15 +73,15 @@ def load_data(protein_name):
     return X_train, y_train, X_test, y_test
 
 
+# this computes balanced class weights for handling imbalanced data
 def get_class_weight(y_train):
-    """Compute balanced class weights for imbalanced datasets."""
     classes = np.unique(y_train)
     weights = compute_class_weight('balanced', classes=classes, y=y_train)
     return dict(zip(classes, weights))
 
 
+# this computes all the evaluation metrics for one model
 def evaluate(model_name, y_test, y_pred, y_prob):
-    """Compute all evaluation metrics."""
     return {
         'Model'    : model_name,
         'ROC-AUC'  : roc_auc_score(y_test, y_prob),
@@ -90,15 +92,17 @@ def evaluate(model_name, y_test, y_pred, y_prob):
     }
 
 
+# this plots the roc curves for all models for one protein
 def plot_roc_curves(protein_name, roc_data):
-    """Plot ROC curves for all models for one protein."""
     fig, ax = plt.subplots(figsize=(8, 6))
 
+    # one curve per model
     for model_name, (fpr, tpr, auc) in roc_data.items():
         ax.plot(fpr, tpr, linewidth=2,
                 color=COLORS.get(model_name, 'gray'),
                 label=f'{model_name} (AUC={auc:.3f})')
 
+    # diagonal reference line for a random classifier
     ax.plot([0, 1], [0, 1], 'k--', linewidth=1, alpha=0.5, label='Random')
     ax.set_xlabel('False Positive Rate', fontsize=12)
     ax.set_ylabel('True Positive Rate', fontsize=12)
@@ -114,13 +118,14 @@ def plot_roc_curves(protein_name, roc_data):
     print(f'  Saved: {protein_name}_roc_curves.png')
 
 
+# this plots a confusion matrix for each model side by side
 def plot_confusion_matrices(protein_name, cm_data):
-    """Plot confusion matrices for all models for one protein."""
     n_models = len(cm_data)
     fig, axes = plt.subplots(1, n_models, figsize=(5 * n_models, 4))
     if n_models == 1:
         axes = [axes]
 
+    # making one heatmap per model
     for ax, (model_name, cm) in zip(axes, cm_data.items()):
         im = ax.imshow(cm, cmap='Blues')
         ax.set_xticks([0, 1])
@@ -131,6 +136,7 @@ def plot_confusion_matrices(protein_name, cm_data):
         ax.set_ylabel('Actual', fontsize=10)
         ax.set_title(model_name, fontweight='bold', fontsize=10)
 
+        # writing the count in each cell
         for i in range(2):
             for j in range(2):
                 ax.text(j, i, str(cm[i, j]),
@@ -148,9 +154,7 @@ def plot_confusion_matrices(protein_name, cm_data):
     print(f'  Saved: {protein_name}_confusion_matrices.png')
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN — TRAIN AND EVALUATE MODELS PER PROTEIN
-# ═══════════════════════════════════════════════════════════════════════════════
+# training and evaluating all models for each protein
 all_results = []
 
 for protein_name in PROTEINS:
@@ -158,7 +162,7 @@ for protein_name in PROTEINS:
     print(f"PROTEIN: {protein_name} ({DISEASE[protein_name]})")
     print(f"{'='*60}")
 
-    # Load data
+    # loading the train and test data
     X_train, y_train, X_test, y_test = load_data(protein_name)
     if X_train is None:
         continue
@@ -168,11 +172,11 @@ for protein_name in PROTEINS:
     print(f"  Binders in test  : {y_test.sum()} ({y_test.mean()*100:.1f}%)")
     print(f"  Features         : {X_train.shape[1]}")
 
-    # Class weights for imbalanced data
+    # computing class weights for the imbalanced data
     cw = get_class_weight(y_train)
     print(f"  Class weights    : {cw}")
 
-    # Scale features (important for Logistic Regression)
+    # scaling features since logistic regression needs it
     scaler  = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled  = scaler.transform(X_test)
@@ -180,7 +184,7 @@ for protein_name in PROTEINS:
     roc_data = {}
     cm_data  = {}
 
-    # ── 1. LOGISTIC REGRESSION ─────────────────────────────────────────────
+    # model 1 is logistic regression with balanced class weights
     print(f"\n  [1/3] Logistic Regression...")
     lr = LogisticRegression(
         max_iter     = 1000,
@@ -196,6 +200,7 @@ for protein_name in PROTEINS:
     metrics_lr['Protein'] = protein_name
     all_results.append(metrics_lr)
 
+    # saving roc and confusion matrix data for plotting later
     fpr, tpr, _ = roc_curve(y_test, y_prob_lr)
     roc_data['Logistic Regression'] = (fpr, tpr, metrics_lr['ROC-AUC'])
     cm_data['Logistic Regression']  = confusion_matrix(y_test, y_pred_lr)
@@ -205,7 +210,7 @@ for protein_name in PROTEINS:
     print(f"    Precision: {metrics_lr['Precision']:.4f}")
     print(f"    Recall   : {metrics_lr['Recall']:.4f}")
 
-    # ── 2. RANDOM FOREST ──────────────────────────────────────────────────
+    # model 2 is random forest, no scaling needed for tree models
     print(f"\n  [2/3] Random Forest...")
     rf = RandomForestClassifier(
         n_estimators = 100,
@@ -214,7 +219,7 @@ for protein_name in PROTEINS:
         n_jobs       = -1,
         max_depth    = 10,
     )
-    rf.fit(X_train, y_train)   # RF doesn't need scaling
+    rf.fit(X_train, y_train)
     y_pred_rf = rf.predict(X_test)
     y_prob_rf = rf.predict_proba(X_test)[:, 1]
 
@@ -231,11 +236,11 @@ for protein_name in PROTEINS:
     print(f"    Precision: {metrics_rf['Precision']:.4f}")
     print(f"    Recall   : {metrics_rf['Recall']:.4f}")
 
-    # ── 3. XGBOOST ────────────────────────────────────────────────────────
+    # model 3 is xgboost which usually works best for tabular data
     if XGBOOST_AVAILABLE:
         print(f"\n  [3/3] XGBoost...")
 
-        # Calculate scale_pos_weight for imbalance
+        # computing scale_pos_weight for class imbalance
         neg = (y_train == 0).sum()
         pos = (y_train == 1).sum()
         scale_pos_weight = neg / pos
@@ -267,14 +272,14 @@ for protein_name in PROTEINS:
         print(f"    Precision: {metrics_xgb['Precision']:.4f}")
         print(f"    Recall   : {metrics_xgb['Recall']:.4f}")
     else:
-        print(f"\n  [3/3] XGBoost — skipped (not installed)")
+        print(f"\n  [3/3] XGBoost - skipped (not installed)")
 
-    # ── PLOTS ─────────────────────────────────────────────────────────────
+    # generating the roc curve and confusion matrix plots
     print(f"\n  Generating plots...")
     plot_roc_curves(protein_name, roc_data)
     plot_confusion_matrices(protein_name, cm_data)
 
-    # ── CLASSIFICATION REPORT ─────────────────────────────────────────────
+    # printing a full classification report for the best model
     print(f"\n  Best model classification report:")
     best_model_name = max(
         [m for m in ['Logistic Regression','Random Forest','XGBoost']
@@ -300,33 +305,29 @@ for protein_name in PROTEINS:
     ))
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SUMMARY TABLE
-# ═══════════════════════════════════════════════════════════════════════════════
+# building the final summary table
 print(f"\n{'='*60}")
-print("FINAL RESULTS — ALL PROTEINS & MODELS")
+print("FINAL RESULTS - ALL PROTEINS & MODELS")
 print(f"{'='*60}")
 
 results_df = pd.DataFrame(all_results)
 results_df = results_df[['Protein','Model','ROC-AUC','F1',
                           'Precision','Recall','Accuracy']]
 
-# Round for display
+# rounding the numbers for cleaner display
 display_df = results_df.copy()
 for col in ['ROC-AUC','F1','Precision','Recall','Accuracy']:
     display_df[col] = display_df[col].round(4)
 
 print(display_df.to_string(index=False))
 
-# Save results
+# saving the results table to csv
 results_path = os.path.join(RES_PATH, 'baseline_results.csv')
 results_df.to_csv(results_path, index=False)
 print(f"\nResults saved to: baseline_results.csv")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# COMPARISON PLOT — ALL PROTEINS & MODELS
-# ═══════════════════════════════════════════════════════════════════════════════
+# making a comparison plot showing all metrics across proteins and models
 print(f"\nGenerating comparison plots...")
 
 metrics_to_plot = ['ROC-AUC', 'F1', 'Precision', 'Recall']
@@ -338,6 +339,7 @@ proteins = results_df['Protein'].unique()
 x        = np.arange(len(proteins))
 width    = 0.25
 
+# one subplot per metric, grouped bars by model
 for ax, metric in zip(axes_flat, metrics_to_plot):
     for i, model in enumerate(models):
         model_df = results_df[results_df['Model'] == model]
@@ -350,6 +352,7 @@ for ax, metric in zip(axes_flat, metrics_to_plot):
                       label=model,
                       color=COLORS.get(model, 'gray'),
                       alpha=0.85, edgecolor='white')
+        # writing the value on top of each bar
         for bar, val in zip(bars, values):
             ax.text(bar.get_x() + bar.get_width()/2,
                     bar.get_height() + 0.005,
@@ -365,7 +368,7 @@ for ax, metric in zip(axes_flat, metrics_to_plot):
     ax.set_ylim(0, 1.15)
     ax.grid(True, alpha=0.2, axis='y')
 
-plt.suptitle('Baseline Model Comparison — All Proteins',
+plt.suptitle('Baseline Model Comparison - All Proteins',
              fontweight='bold', fontsize=14, y=1.01)
 plt.tight_layout()
 plt.savefig(os.path.join(FIG_PATH, 'baseline_comparison.png'),
@@ -374,9 +377,7 @@ plt.close()
 print(f"Saved: baseline_comparison.png")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SUMMARY
-# ═══════════════════════════════════════════════════════════════════════════════
+# printing the final summary of the best model per protein
 print(f"\n{'='*60}")
 print("BASELINE MODELS COMPLETE")
 print(f"{'='*60}")
@@ -391,4 +392,4 @@ for protein in proteins:
 
 print(f"\n  Figures saved to : {FIG_PATH}")
 print(f"  Results saved to : {results_path}")
-print(f"\n  Next: 05_gnn.py — Graph Neural Network")
+print(f"\n  Next: 05_gnn.py - Graph Neural Network")
