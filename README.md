@@ -38,7 +38,7 @@ python main.py
 | 4 | `eda.py` | Generates 6 exploratory figures |
 | 5 | `preprocessing.py` | Downloads drug datasets, computes Morgan fingerprints, 80/20 split |
 | 6 | `baseline_model.py` | Trains LR, RF, XGBoost per protein |
-| 7 | `GGN.py` | Trains Graph Attention Network per protein |
+| 7 | `GNN.py` | Trains Graph Attention Network per protein |
 | 8 | `visualize_molecules.py` | Draws 2D drug structures and property plots |
 
 Steps 1 and 2 download PDB structures and take 10-30 minutes on first run. All subsequent runs are instant since outputs are cached.
@@ -146,7 +146,7 @@ CS-439-Final-Project/
 ├── eda.py                     # exploratory data analysis - 6 figures
 ├── preprocessing.py           # drug datasets + Morgan fingerprints + train/test splits
 ├── baseline_model.py          # logistic regression, random forest, XGBoost
-├── GGN.py                     # graph attention network
+├── GNN.py                     # graph attention network
 ├── visualize_molecules.py     # 2D drug structure and property visualizations
 ├── requirements.txt
 ├── README.md
