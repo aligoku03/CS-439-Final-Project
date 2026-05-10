@@ -38,7 +38,7 @@ python main.py
 | 4 | `eda.py` | Generates 6 exploratory figures |
 | 5 | `preprocessing.py` | Downloads drug datasets, computes Morgan fingerprints, 80/20 split |
 | 6 | `baseline_model.py` | Trains LR, RF, XGBoost per protein |
-| 7 | `GNN.py` | Trains Graph Attention Network per protein |
+| 7 | `GGN.py` | Trains Graph Attention Network per protein |
 | 8 | `visualize_molecules.py` | Draws 2D drug structures and property plots |
 
 Steps 1 and 2 download PDB structures and take 10-30 minutes on first run. All subsequent runs are instant since outputs are cached.
@@ -110,8 +110,8 @@ A custom DrugProteinGNN combining drug structure with protein features:
 - 3 GATConv layers (16-dim atom features to 128-dim hidden) with BatchNorm and dropout 0.5
 - Edge features (6-dim bond features) passed to attention layers
 - Global mean pooling to produce one vector per molecule
-- Concatenation with 36-dim PDB protein feature vector
-- 3 fully connected layers (128 -> 64 -> 1)
+- Concatenation with 36-dim PDB protein feature vector (producing a 164-dim combined vector)
+- 3 fully connected layers (164 → 128 → 64 → 1)
 
 Drug-level splitting is used to prevent data leakage — the same drug molecule never appears in both train and test sets.
 
@@ -129,11 +129,11 @@ Drug-level splitting is used to prevent data leakage — the same drug molecule 
 
 | Protein | GNN | vs Best Baseline |
 |---|---|---|
-| EGFR (Cancer) | **0.844** | +0.066 |
-| BACE1 (Alzheimer's) | 0.675 | -0.197 |
-| HIV Protease (HIV/AIDS) | 0.766 | -0.043 |
+| EGFR (Cancer) | 0.723 | -0.055 |
+| BACE1 (Alzheimer's) | 0.649 | -0.223 |
+| HIV Protease (HIV/AIDS) | **0.776** | -0.033 |
 
-The GNN improves on EGFR but does not generalize to BACE1 or HIV Protease under fixed hyperparameters — consistent with findings that GNN advantages are most reliable on balanced, structurally homogeneous datasets.
+The GNN did not outperform the XGBoost baseline on any of the three targets under fixed hyperparameters. XGBoost on Morgan fingerprints proved to be a consistently strong baseline across all dataset sizes and class distributions. These results are consistent with findings that GNN advantages are most reliable on balanced, structurally homogeneous datasets — conditions that were not fully met here given class imbalance in BACE1 and HIV Protease, and the very small sample size of EGFR (68 unique drugs).
 
 ## Repository Structure
 
@@ -146,7 +146,7 @@ CS-439-Final-Project/
 ├── eda.py                     # exploratory data analysis - 6 figures
 ├── preprocessing.py           # drug datasets + Morgan fingerprints + train/test splits
 ├── baseline_model.py          # logistic regression, random forest, XGBoost
-├── GNN.py                     # graph attention network
+├── GGN.py                     # graph attention network
 ├── visualize_molecules.py     # 2D drug structure and property visualizations
 ├── requirements.txt
 ├── README.md
@@ -167,7 +167,7 @@ CS-439-Final-Project/
 
 - HIV Protease train/test files are not included in the repository due to size (~325MB). They are regenerated automatically when `preprocessing.py` runs.
 - The EGFR dataset contains only 68 unique drugs, making results on that protein sensitive to the random split. Drug-level splitting is applied to prevent leakage.
-- BACE1 GNN underperforms the baseline — this is an honest finding reported in the paper rather than a bug.
+- The GNN underperforms the XGBoost baseline on all three targets — this is an honest finding reported in the paper rather than a bug.
 
 ## Authors
 
