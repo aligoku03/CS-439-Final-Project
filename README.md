@@ -133,7 +133,7 @@ Drug-level splitting is used to prevent data leakage — the same drug molecule 
 | BACE1 (Alzheimer's) | 0.649 | -0.223 |
 | HIV Protease (HIV/AIDS) | **0.776** | -0.033 |
 
-The GNN did not outperform the XGBoost baseline on any of the three targets under fixed hyperparameters. XGBoost on Morgan fingerprints proved to be a consistently strong baseline across all dataset sizes and class distributions. These results are consistent with findings that GNN advantages are most reliable on balanced, structurally homogeneous datasets — conditions that were not fully met here given class imbalance in BACE1 and HIV Protease, and the very small sample size of EGFR (68 unique drugs).
+The GNN did not outperform the XGBoost baseline on any of the three targets under fixed hyperparameters. XGBoost on Morgan fingerprints proved to be a consistently strong baseline across all dataset sizes and class distributions. These results are consistent with findings that GNN advantages are most reliable on balanced, structurally homogeneous datasets — given class imbalance in HIV Protease, greater chemical diversity in BACE1, and the very small sample size of EGFR.
 
 ## Repository Structure
 
